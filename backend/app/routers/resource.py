@@ -11,9 +11,14 @@ from fastapi.responses import StreamingResponse
 
 from app.schemas import ActionPayload, ActionResult, EntryPayload, PageResult
 from app.services import service_for
+from app.services.data_lake_read import DataLakeReadService
+from app.services.cost_govern import CostGovernService
 from app.store import store
 
 router = APIRouter(prefix="/api", tags=["业务资源"])
+
+lake_svc = DataLakeReadService()
+cost_svc = CostGovernService()
 
 
 def require_service(module: str):
@@ -21,6 +26,28 @@ def require_service(module: str):
     if service is None:
         raise HTTPException(status_code=404, detail=f"未知业务模块：{module}")
     return service
+
+
+# -- 湖仓分区检索（须先于通用 /{module}/{entry_id} 注册） --
+
+@router.post("/data_lake_read/partition-scan")
+def lake_partition_scan(
+    path_id: int = Query(...),
+    start_date: str = Query(..., description="筛选起始日期 YYYY-MM-DD"),
+    end_date: str = Query(..., description="筛选结束日期 YYYY-MM-DD"),
+) -> dict[str, Any]:
+    """按日期筛选条件检索文件分区明细，返回命中的候选文件与按分区计算的扫描预算。"""
+    return lake_svc.retrieve_by_date_range(path_id, start_date, end_date)
+
+
+@router.get("/data_lake_read/{path_id}/partition-budget")
+def lake_partition_budget(
+    path_id: int,
+    start_date: str = Query(...),
+    end_date: str = Query(...),
+) -> dict[str, Any]:
+    """读取成本治理中该检索范围对应的预算记录，供成本治理详情核对。"""
+    return cost_svc.get_partition_scan_budget(f"lake:{path_id}:{start_date}~{end_date}")
 
 
 # -- CRUD --
@@ -91,10 +118,8 @@ from app.services.olap_cube import OlapCubeService
 from app.services.data_exporter import DataExporterService
 from app.services.result_cache import ResultCacheService
 from app.services.aggregate_cache import AggregateCacheService
-from app.services.data_lake_read import DataLakeReadService
 from app.services.query_rewrite import QueryRewriteService
 from app.services.query_audit import QueryAuditService
-from app.services.cost_govern import CostGovernService
 from app.services.data_contract import DataContractService
 from app.services.semantic_model import SemanticModelService
 
@@ -105,10 +130,8 @@ cube_svc = OlapCubeService()
 exporter_svc = DataExporterService()
 result_cache_svc = ResultCacheService()
 agg_cache_svc = AggregateCacheService()
-lake_svc = DataLakeReadService()
 rewrite_svc = QueryRewriteService()
 audit_svc = QueryAuditService()
-cost_svc = CostGovernService()
 contract_svc = DataContractService()
 
 

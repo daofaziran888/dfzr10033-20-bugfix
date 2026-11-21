@@ -1,6 +1,13 @@
 import { request } from './client'
 import { moduleMeta } from '@/data/modules'
-import type { ActionResult, EntryRow, OverviewResult, PageResult } from '@/data/types'
+import type {
+  ActionResult,
+  CostBudgetDetail,
+  EntryRow,
+  OverviewResult,
+  PageResult,
+  PartitionScanResult,
+} from '@/data/types'
 
 export { moduleMeta }
 
@@ -58,4 +65,31 @@ export async function loadOverview(): Promise<OverviewResult> {
   const response = await request('/api/overview')
   if (!response.ok) throw new Error('运营概览读取失败')
   return await response.json()
+}
+
+export async function scanLakePartitions(
+  pathId: number,
+  startDate: string,
+  endDate: string,
+): Promise<PartitionScanResult> {
+  const query = new URLSearchParams({
+    path_id: String(pathId),
+    start_date: startDate,
+    end_date: endDate,
+  }).toString()
+  const response = await request(`/api/data_lake_read/partition-scan?${query}`, { method: 'POST' })
+  const payload = (await response.json()) as PartitionScanResult
+  if (!response.ok || !payload.ok) throw new Error(payload.message || '分区检索失败')
+  return payload
+}
+
+export async function loadPartitionBudget(
+  pathId: number,
+  startDate: string,
+  endDate: string,
+): Promise<CostBudgetDetail> {
+  const query = new URLSearchParams({ start_date: startDate, end_date: endDate }).toString()
+  const response = await request(`/api/data_lake_read/${pathId}/partition-budget?${query}`)
+  if (!response.ok) throw new Error('预算记录读取失败')
+  return (await response.json()) as CostBudgetDetail
 }
